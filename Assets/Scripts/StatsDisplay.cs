@@ -14,6 +14,9 @@ public class StatsDisplay : MonoBehaviour
 
     void Update()
     {
-        scoreText.text = "Cooking Score: " + player.score;
+        if (player != null && scoreText != null)
+        {
+            scoreText.text = "Cooking Score: " + player.score;
+        }
     }
 }

@@ -28,10 +28,10 @@ public class ClickMove : MonoBehaviour
         playerStats = GetComponentInParent<PlayerStats>();
 
         if (playerStats == null)
-            playerStats = FindObjectOfType<PlayerStats>();
+            playerStats = FindFirstObjectByType<PlayerStats>();
 
         if (playerStats == null)
-            Debug.LogError("PlayerStats not found anywhere in the scene!");
+            Debug.LogWarning("PlayerStats not found in scene - ClickMove functionality may be limited");
     }
 
     void Update()
@@ -57,7 +57,7 @@ public class ClickMove : MonoBehaviour
         }
 
         // ---- Click detection ----
-        if (Mouse.current.leftButton.wasPressedThisFrame)
+        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
         {
             Vector3 mouseWorld = Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
             Vector2 mousePos2D = new Vector2(mouseWorld.x, mouseWorld.y);
@@ -68,9 +68,12 @@ public class ClickMove : MonoBehaviour
             {
                 if (!movingUp && !movingBack)
                 {
-                    // increase score
-                    playerStats.score++;
-                    Debug.Log("Score: " + playerStats.score);
+                    // increase score only if playerStats exists
+                    if (playerStats != null)
+                    {
+                        playerStats.score++;
+                        Debug.Log("Score: " + playerStats.score);
+                    }
 
                     movingUp = true;
                 }

@@ -9,6 +9,11 @@ public class Player : MonoBehaviour
     [Header("Character Selection")]
     public string characterName = "Adam";
 
+    [Header("Shooting")]
+    public float bulletSpeed = 10f;
+    public float fireRate = 0.3f; // Time between shots
+    private float nextFireTime = 0f;
+
     [Header("References - MUST ASSIGN")]
     public SpriteRenderer bodyRenderer;
     public SpriteRenderer hatRenderer;
@@ -22,6 +27,7 @@ public class Player : MonoBehaviour
     public float frameRate = 8f;
 
     private Character character;
+    private Camera mainCamera;
 
     void Start()
     {
@@ -34,6 +40,16 @@ public class Player : MonoBehaviour
         rb.constraints = RigidbodyConstraints2D.FreezeRotation;
 
         character = new Character(characterName);
+        mainCamera = Camera.main;
+        
+        if (mainCamera == null)
+        {
+            Debug.LogError("No Main Camera found! Make sure your camera is tagged as 'MainCamera'");
+        }
+        else
+        {
+            Debug.Log($"Camera found: {mainCamera.name}");
+        }
 
         SetSprite("idle_anim", "down", 0);
     }
@@ -144,7 +160,52 @@ public class Player : MonoBehaviour
             SwitchCharacter(1);
         }
 
+        // Shooting with mouse (supports both new and old input systems)
+        bool mousePressed = false;
+        
+        // Try new Input System first
+        Mouse mouse = Mouse.current;
+        if (mouse != null)
+        {
+            mousePressed = mouse.leftButton.isPressed;
+            if (mousePressed && Time.frameCount % 30 == 0) // Log every 30 frames to avoid spam
+            {
+                Debug.Log("Mouse detected via new Input System");
+            }
+        }
+        else
+        {
+            // Fallback to legacy Input system
+            mousePressed = Input.GetMouseButton(0);
+            if (mousePressed && Time.frameCount % 30 == 0)
+            {
+                Debug.Log("Mouse detected via legacy Input System");
+            }
+        }
+        
+        if (mousePressed && Time.time >= nextFireTime)
+        {
+            Shoot();
+            nextFireTime = Time.time + fireRate;
+        }
+
         UpdateAnimation();
+        ClampPositionToScreen();
+    }
+    
+    void ClampPositionToScreen()
+    {
+        if (mainCamera == null) return;
+        
+        Vector3 pos = transform.position;
+        Vector3 viewPos = mainCamera.WorldToViewportPoint(pos);
+        
+        // Clamp to 0-1 viewport space (with small buffer)
+        viewPos.x = Mathf.Clamp(viewPos.x, 0.05f, 0.95f);
+        viewPos.y = Mathf.Clamp(viewPos.y, 0.05f, 0.95f);
+        
+        Vector3 newPos = mainCamera.ViewportToWorldPoint(viewPos);
+        transform.position = new Vector3(newPos.x, newPos.y, pos.z);
     }
 
     void FixedUpdate()
@@ -182,5 +243,68 @@ public class Player : MonoBehaviour
         currentFrame = 0;
 
         Debug.Log($"Switched to {characterName}");
+    }
+
+    void Shoot()
+    {
+        if (mainCamera == null) return;
+
+        // Get mouse position in world space (support both input systems)
+        Vector3 mousePos;
+        
+        Mouse mouse = Mouse.current;
+        if (mouse != null)
+        {
+            // New Input System
+            mousePos = mouse.position.ReadValue();
+        }
+        else
+        {
+            // Legacy Input System
+            mousePos = Input.mousePosition;
+        }
+        
+        // For 2D orthographic camera, use camera's z position
+        mousePos.z = mainCamera.nearClipPlane;
+        Vector3 worldPos = mainCamera.ScreenToWorldPoint(mousePos);
+        worldPos.z = 0;
+
+        // Get spawn position from body renderer (actual character position)
+        Vector3 spawnPos = bodyRenderer != null ? bodyRenderer.transform.position : transform.position;
+
+        // Calculate direction from spawn position to mouse
+        Vector2 direction = (worldPos - spawnPos).normalized;
+        
+        // Offset spawn position slightly in the direction of shooting to avoid hitting player
+        spawnPos += (Vector3)(direction * 0.5f);
+        
+        Debug.Log($"Mouse screen: {mousePos}, world: {worldPos}, spawn: {spawnPos}, direction: {direction}");
+
+        // Create bullet GameObject
+        GameObject bulletObj = new GameObject("Bullet");
+        bulletObj.transform.position = spawnPos;
+        bulletObj.layer = LayerMask.NameToLayer("Default");
+        
+        Debug.Log($"Created bullet at {bulletObj.transform.position} (player at {transform.position})");
+
+        // Add SpriteRenderer with circular sprite
+        SpriteRenderer bulletRenderer = bulletObj.AddComponent<SpriteRenderer>();
+        bulletRenderer.sprite = Bullet.CreateCircleBulletSprite(16, new Color(1f, 0.8f, 0f, 1f));
+        bulletRenderer.sortingOrder = 10; // Render above most things
+
+        // Add CircleCollider2D for collision detection
+        CircleCollider2D collider = bulletObj.AddComponent<CircleCollider2D>();
+        collider.radius = 0.4f;
+        collider.isTrigger = true;
+
+        // Add Rigidbody2D
+        Rigidbody2D bulletRb = bulletObj.AddComponent<Rigidbody2D>();
+        bulletRb.gravityScale = 0;
+        bulletRb.constraints = RigidbodyConstraints2D.FreezeRotation;
+
+        // Add Bullet script and set direction
+        Bullet bullet = bulletObj.AddComponent<Bullet>();
+        bullet.speed = bulletSpeed;
+        bullet.SetDirection(direction);
     }
 }
